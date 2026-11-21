@@ -225,11 +225,17 @@ const state = {
   otherBrand: false,
   otherBrandText: '',
   modelUnknown: false,
+  freeModel: false,
+  genUnknown: false,
 };
 if (P.get('clean') === '1') document.body.classList.add('clean');
 
 const BRANDS = DATA.brands;                    // strict v2
 const ALIASES = DATA.aliases;                  // canonical -> [strings]
+// F-06/F-F: дешёвые дополнения к алиасам (латинский ввод кирилличных марок + модельные алиасы CRM)
+ALIASES['ГАЗ'] = ['gaz', 'газ', 'Gaz'];
+ALIASES['УАЗ'] = ['uaz', 'уаз', 'Uaz'];
+const MODEL_ALIASES = { 'Dongfeng': { 'BOX': ['бокс', 'box'] } };
 const LISTINGS = DATA.listings;                // brand -> model -> count
 const DEMAND = DATA.demand;                    // [{name, orders}] CRM 12m, desc
 const SHOWCASE = DATA.showcase;                // top-12 CRM demand canonical names
@@ -277,10 +283,13 @@ function searchModels(brand, q) {
   const nq = norm(q), tq = translit(q);
   if (!nq) return null;
   const res = [];
+  const mal = MODEL_ALIASES[brand] || {};
   for (const m of modelsOf(brand)) {
     const nm = norm(m.name), tm = translit(m.name);
+    const aliasHit = (mal[m.name] || []).some(x => norm(x) === nq || norm(x).includes(nq) && nq.length >= 3);
     let kind = null;
-    if (nm.includes(nq)) kind = 'точно';
+    if (aliasHit) kind = 'точно';
+    else if (nm.includes(nq)) kind = 'точно';
     else if (tq && tm.includes(tq)) kind = 'транслит';
     else if (nq.length >= 5 && (lev(nm, nq) <= 2 || (tq && lev(tm, tq) <= 2))) kind = 'похоже';
     if (kind) res.push({name: m.name, kind});
@@ -297,6 +306,8 @@ function sortedModels(brand) {
   const byPop = [...ms].sort((a, b) => listingsOf(brand, b) - listingsOf(brand, a) || a.localeCompare(b, 'ru'));
   if (state.sort === 'S2') return {sections: [{title: null, items: byPop.map(n => ({name: n, pop: listingsOf(brand, n)}))}]};
   const top = byPop.filter(n => listingsOf(brand, n) > 0).slice(0, 6);
+  // правило вырожденной секции (ревью F-A): «Популярные» только если >= 3 кандидата с listings > 0
+  if (top.length < 3) return {sections: [{title: null, items: alpha.map(n => ({name: n}))}]};
   const rest = alpha.filter(n => !top.includes(n));
   return {sections: [
     {title: 'Популярные', items: top.map(n => ({name: n, pop: listingsOf(brand, n)}))},
@@ -367,10 +378,12 @@ function renderStep1() {
   wireSearch();
   body.querySelectorAll('[data-brand]').forEach(el => el.addEventListener('click', () => {
     state.brand = el.dataset.brand; state.otherBrand = false; state.model = ''; state.gen = ''; state.q = '';
+    state.freeModel = false; state.genUnknown = false; state.modelUnknown = false;
     state.step = 2; render();
   }));
   const other = body.querySelector('#other');
-  if (other) other.addEventListener('click', () => { state.otherBrand = !state.otherBrand; state.brand = ''; render(); });
+  // прод-поведение (ревью F-C): панель ввода показывается под витриной, выбор марки НЕ сбрасывается
+  if (other) other.addEventListener('click', () => { state.otherBrand = !state.otherBrand; render(); });
   const fb = body.querySelector('#freebrand');
   if (fb) { fb.addEventListener('input', () => { state.otherBrandText = fb.value; renderChrome(); updateNext(); }); fb.focus(); }
   updateNext();
@@ -388,12 +401,15 @@ function renderStep2() {
     html += `<input class="freeinput" id="freemodel" placeholder="Впишите модель вручную" value="${esc(state.model)}" style="margin-top:0">`;
   } else if (hits) {
     html += '<div class="list" role="listbox">';
-    if (hits.length === 0) html += '<p class="empty">Ничего не найдено — проверьте написание или пропустите шаг.</p>';
+    if (hits.length === 0) html += '<p class="empty">Ничего не найдено — проверьте написание.</p>';
     for (const h of hits.slice(0, 30)) {
       const badge = h.kind === 'точно' ? '' : `<span class="badge ${h.kind === 'похоже' ? 'fuzzy' : ''}">${h.kind}</span>`;
       html += `<button class="opt ${state.model === h.name ? 'sel' : ''}" data-model="${esc(h.name)}">${esc(h.name)}${badge}</button>`;
     }
     html += '</div>';
+    // ревью F-D: свободный ввод в пустом состоянии поиска (кейс Sprinter: марка есть, модели в каталоге нет)
+    if (hits.length === 0 && !state.freeModel) html += `<button class="special" id="freemodelbtn">Не нашли? Впишите модель вручную</button>`;
+    if (state.freeModel) html += `<input class="freeinput" id="freemodel" placeholder="Впишите модель вручную" value="${esc(state.model)}">`;
   } else {
     const {sections} = sortedModels(brand);
     html += '<div class="list" role="listbox">';
@@ -413,37 +429,52 @@ function renderStep2() {
   wireSearch();
   body.querySelectorAll('[data-model]').forEach(el => el.addEventListener('click', () => {
     state.model = el.dataset.model; state.modelUnknown = false; state.gen = ''; state.q = '';
+    state.freeModel = false; state.genUnknown = false;
     state.step = 3; render();
   }));
   const un = body.querySelector('#unknown');
   if (un) un.addEventListener('click', () => { state.modelUnknown = !state.modelUnknown; state.model = state.modelUnknown ? 'Не знаю модель' : ''; render(); });
+  const fmb = body.querySelector('#freemodelbtn');
+  if (fmb) fmb.addEventListener('click', () => { state.freeModel = true; render(); body.querySelector('#freemodel')?.focus(); });
   const fm = body.querySelector('#freemodel');
-  if (fm) fm.addEventListener('input', () => { state.model = fm.value; renderChrome(); updateNext(); });
+  if (fm) { fm.addEventListener('input', () => { state.model = fm.value; state.modelUnknown = false; renderChrome(); updateNext(); }); }
   updateNext();
 }
 
 function renderStep3() {
   const body = $('#qbody');
   const brand = state.brand || state.otherBrandText;
-  const gens = (modelsOf(brand).find(m => m.name === state.model) || {generations: []}).generations;
+  const rawGens = (modelsOf(brand).find(m => m.name === state.model) || {generations: []}).generations;
+  // ревью F-E / фикс F-01: единственный fallback {I, years:""} = «данных нет» → прод-ветка свободного ввода.
+  // «I» не рендерится и не попадает в заявку; шаг 3 и трекинг не меняются.
+  const gens = (rawGens.length === 1 && rawGens[0].name === 'I' && rawGens[0].years === '') ? [] : rawGens;
   let html = `<section><h3>Поколение или год выпуска</h3>
     <p class="sub"><span class="brand">${esc(brand)} ${esc(state.model)}</span> — чтобы дизайн точно совпал с вашей машиной</p>`;
-  html += searchBox('Поиск поколения…');
-  const nq = norm(state.q);
-  const shown = gens.map(g => ({...g, label: g.years ? `${g.name} (${g.years})` : g.name}))
-    .filter(g => !nq || norm(g.label).includes(nq));
-  html += '<div class="list" role="listbox">';
-  if (shown.length === 0) html += '<p class="empty">Ничего не найдено.</p>';
-  for (const g of shown) {
-    const years = g.years ? ` <span class="gen-years">(${esc(g.years)})</span>` : ' <span class="gen-note">· годы не указаны</span>';
-    html += `<button class="opt ${state.gen === g.name ? 'sel' : ''}" data-gen="${esc(g.name)}">${esc(g.name)}${years}</button>`;
+  if (gens.length === 0) {
+    html += `<input class="freeinput" id="genfree" placeholder="Например: рестайлинг 2019" value="${esc(state.genUnknown ? '' : state.gen)}" style="margin-top:0">`;
+    html += `<button class="special ${state.genUnknown ? 'on' : ''}" id="genunknown">Не знаю поколение</button>`;
+    html += `<details class="legend"><summary><b>Фикс F-01 (фильтр в data-слое)</b></summary> у ${DATA.fallbackCount} моделей v2 нет поколений на av.by (единственный fallback «I» с пустыми годами). Такая модель трактуется как «данных нет» и получает существующую прод-ветку: свободный ввод + «Не знаю поколение». «I ()» не рендерится никогда, «I» не уходит в заявку. Автопропуск шага 3 отклонён ревью: теряется свободный текст клиента и ломается порядок трекинг-событий.</details>`;
+  } else {
+    html += searchBox('Поиск поколения…');
+    const nq = norm(state.q);
+    const shown = gens.map(g => ({...g, label: g.years ? `${g.name} (${g.years})` : g.name}))
+      .filter(g => !nq || norm(g.label).includes(nq));
+    html += '<div class="list" role="listbox">';
+    if (shown.length === 0) html += '<p class="empty">Ничего не найдено.</p>';
+    for (const g of shown) {
+      const years = g.years ? ` <span class="gen-years">(${esc(g.years)})</span>` : ' <span class="gen-note">· годы не указаны</span>';
+      html += `<button class="opt ${state.gen === g.name ? 'sel' : ''}" data-gen="${esc(g.name)}">${esc(g.name)}${years}</button>`;
+    }
+    html += '</div>';
   }
-  html += '</div>';
-  html += `<details class="legend"><summary><b>Фикс F-01 (прототип)</b></summary> у ${DATA.fallbackCount} моделей v2 нет поколений на av.by — вместо «I ()» показываем имя без пустых скобок. Значение в заявке — только имя поколения.</details>`;
   html += '</section>';
   body.innerHTML = html;
   wireSearch();
-  body.querySelectorAll('[data-gen]').forEach(el => el.addEventListener('click', () => { state.gen = el.dataset.gen; state.q = ''; render(); }));
+  body.querySelectorAll('[data-gen]').forEach(el => el.addEventListener('click', () => { state.gen = el.dataset.gen; state.genUnknown = false; state.q = ''; render(); }));
+  const gf = body.querySelector('#genfree');
+  if (gf) gf.addEventListener('input', () => { state.gen = gf.value; state.genUnknown = false; renderChrome(); updateNext(); });
+  const gu = body.querySelector('#genunknown');
+  if (gu) gu.addEventListener('click', () => { state.genUnknown = !state.genUnknown; state.gen = state.genUnknown ? 'Не знаю поколение' : ''; render(); });
   updateNext();
 }
 
