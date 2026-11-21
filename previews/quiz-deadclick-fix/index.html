@@ -26,6 +26,10 @@ body{background:#e8e6e1;font-family:'DM Sans',system-ui,sans-serif;}
 .demo-help{border:0;background:#e8a33d;color:#1c2321;border-radius:6px;padding:5px 8px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;}
 .demo-note{font-size:11.5px;line-height:1.4;color:#ffe9b8;margin-top:5px;}
 .demo-note[hidden]{display:none;}
+.demo-variants{display:flex;gap:5px;margin-top:5px;flex-wrap:wrap;}
+.demo-variants[hidden]{display:none;}
+.demo-variants button{border:1px solid #5a6b4f;background:transparent;color:#cfd6cb;border-radius:20px;padding:3px 8px;font-size:10.5px;font-weight:700;cursor:pointer;font-family:inherit;}
+.demo-variants button[aria-pressed="true"]{background:#e8a33d;border-color:#e8a33d;color:#1c2321;}
 .demo-hud-toggle{border:0;background:transparent;color:#9aa79c;font-size:11px;cursor:pointer;padding:2px 4px;font-family:inherit;}
 .demo-panel{position:fixed;inset:0;background:rgba(28,35,33,.6);display:flex;align-items:flex-end;justify-content:center;z-index:9999;}
 .demo-panel[hidden]{display:none;}
@@ -57,7 +61,7 @@ body{background:#e8e6e1;font-family:'DM Sans',system-ui,sans-serif;}
     <h1>Квиз auto.caseme.by — два исправленных шага</h1>
     <p class="sub">Реальная разметка и реальные стили продакшн-квиза. Заявки <b>не отправляются</b>, аналитика не подключена. Сравните «было» и «стало» на своём телефоне.</p>
     <button id="go-before" class="demo-go before">Как СЕЙЧАС (было)<small>Шаг 4: «Далее» заблокирована. Шаг 1: «+ Другая» — реакция невидима.</small></button>
-    <button id="go-after" class="demo-go after">С ФИКСОМ (стало)<small>Шаг 4: пустое поле = «без номера», «Далее» активна. Шаг 1: поле видно и в фокусе.</small></button>
+    <button id="go-after" class="demo-go after">С ФИКСОМ (стало) — 3 варианта<small>Шаг 4: пустое поле = «без номера», «Далее» активна. Шаг 1: варианты v1/v2/v3 — сравните с открытой клавиатурой.</small></button>
     <button id="help-open2" class="demo-help" style="width:100%;padding:11px;">Что проверить — инструкция</button>
     <ul>
       <li>Шаг 1 демо → «Далее» ведёт сразу на шаг 4 (шаги 2–3 опущены).</li>
@@ -78,9 +82,14 @@ body{background:#e8e6e1;font-family:'DM Sans',system-ui,sans-serif;}
         <button id="seg-after" aria-pressed="false">Стало</button>
       </div>
       <button id="help-open" class="demo-help">?</button>
-      <button id="hud-toggle" class="demo-hud-toggle" aria-expanded="true">▾</button>
+      <button id="hud-toggle" class="demo-hud-toggle" aria-expanded="false">▸</button>
     </div>
-    <div id="note" class="demo-note"></div>
+    <div id="variants" class="demo-variants" hidden>
+      <button id="var-v1" aria-pressed="false">v1 центр+фокус</button>
+      <button id="var-v2" aria-pressed="true">v2 верх+фокус</button>
+      <button id="var-v3" aria-pressed="false">v3 без автофокуса</button>
+    </div>
+    <div id="note" class="demo-note" hidden></div>
   </div>
 </div>
 
@@ -102,17 +111,16 @@ body{background:#e8e6e1;font-family:'DM Sans',system-ui,sans-serif;}
         <br><span class="exp">Стало:</span> пустое поле показывает «Без номера», а не прочерк.</li>
     </ol>
 
-    <h3>Шаг 1 — «+ Другая»</h3>
+    <h3>Шаг 1 — «+ Другая»: три варианта фикса</h3>
+    <p><b>Важно:</b> первый вариант (v1) провалился на реальном телефоне — автофокус открывал клавиатуру, и она закрывала поле. Причина: в проде viewport без <code>interactive-widget</code>, клавиатура сжимает только visual viewport, а диалог остаётся полной высоты. Поэтому сравнивайте v2 и v3.</p>
     <ol>
-      <li>Нажмите «+ Другая» (последняя ячейка сетки).
-        <br><span class="bad">Было:</span> визуально <b>ничего не происходит</b> — поле обрезано за пределами прокрутки.
-        <br><span class="exp">Стало:</span> поле <b>подскроллится в центр и получит фокус</b>, на телефоне откроется клавиатура.</li>
-      <li>Введите марку (например <b>Москвич</b>) → «Далее» станет активной, переход работает.</li>
-      <li>Нажмите «+ Другая» <b>второй раз</b>.
-        <br><span class="exp">Стало:</span> поле свернётся, фокус вернётся на кнопку (не потеряется).</li>
-      <li>Нажмите «←» сверху, затем снова откройте режим.
-        <br><span class="exp">Стало:</span> блок свёрнут, первый тап снова раскрывает поле.</li>
-      <li><b>Клавиатура:</b> когда поле в фокусе и клавиатура открыта — поле должно оставаться видимым, не под клавиатурой. Это то, что headless-браузер проверить не может, поэтому нужен ваш телефон.</li>
+      <li><b>v1 центр+фокус</b> — как было задумано сначала. Нажмите «+ Другая»: клавиатура откроется и <span class="bad">закроет поле</span>. Оставлен для сравнения.</li>
+      <li><b>v2 верх+фокус</b> — поле выравнивается по верху прокрутки, затем фокус. Клавиатура закрывает низ экрана, поле должно <span class="exp">оставаться видимым</span>. Проверьте: видно ли поле и что вы вводите, когда клавиатура открыта.</li>
+      <li><b>v3 без автофокуса</b> — поле появляется вверху, клавиатура <span class="exp">не открывается сама</span>. Вы тапаете поле — браузер сам держит его в виду. Минус: один лишний тап. Плюс: нет неожиданной клавиатуры.</li>
+      <li>Переключайте варианты чипами сверху и сравнивайте <b>с открытой клавиатурой</b>: видно ли поле, видно ли вводимый текст, нужно ли прокручивать вручную.</li>
+      <li>Введите марку (например <b>Москвич</b>) → «Далее» активна, переход работает.</li>
+      <li>Второй тап по «+ Другая» → поле свернётся, фокус вернётся на кнопку.</li>
+      <li>Подсказку сверху можно свернуть кнопкой ▸ — она перекрывает шапку диалога и может мешать обзору.</li>
     </ol>
 
     <h3>Что НЕ входит в демо</h3>
@@ -129,15 +137,23 @@ body{background:#e8e6e1;font-family:'DM Sans',system-ui,sans-serif;}
 
 <script>
 (function(){
-  var mode='before', step=1, brand='', custom='', plate='', noPlate=false, blockOpen=false;
+  var mode='before', variant='v2', step=1, brand='', custom='', plate='', noPlate=false, blockOpen=false;
   var stage=document.getElementById('stage'), note=document.getElementById('note');
   var segBefore=document.getElementById('seg-before'), segAfter=document.getElementById('seg-after');
   var CUSTOM_BLOCK=document.getElementById('tpl-custom').innerHTML;
 
   function tpl(id){return document.getElementById(id).innerHTML;}
-  function setMode(m){mode=m;segBefore.setAttribute('aria-pressed',m==='before');segAfter.setAttribute('aria-pressed',m==='after');render();}
+  function setMode(m){mode=m;segBefore.setAttribute('aria-pressed',m==='before');segAfter.setAttribute('aria-pressed',m==='after');
+    document.getElementById('variants').hidden = (m!=='after'); render();}
   segBefore.onclick=function(){setMode('before');};
   segAfter.onclick=function(){setMode('after');};
+  ['v1','v2','v3'].forEach(function(v){
+    document.getElementById('var-'+v).onclick=function(){
+      variant=v;
+      ['v1','v2','v3'].forEach(function(x){document.getElementById('var-'+x).setAttribute('aria-pressed',x===v?'true':'false');});
+      blockOpen=false; render();
+    };
+  });
 
   function skipped(){return noPlate||!plate.trim();}
 
@@ -157,7 +173,11 @@ body{background:#e8e6e1;font-family:'DM Sans',system-ui,sans-serif;}
     if(step===1){
       note.innerHTML = mode==='before'
         ? '<b>Было:</b> нажмите «+ Другая» — поле появится, но будет <b>обрезано</b> и невидимо. Фокус останется на кнопке.'
-        : '<b>Стало:</b> нажмите «+ Другая» — поле <b>подскроллится и получит фокус</b> (на телефоне откроется клавиатура).';
+        : (variant==='v1'
+          ? '<b>v1 (провалился на телефоне):</b> центр + автофокус. Клавиатура открывается и <b>закрывает поле</b> — не видно, что вводишь.'
+          : variant==='v2'
+          ? '<b>v2:</b> поле выравнивается по <b>верху</b> прокрутки + автофокус. Клавиатура закрывает низ, поле остаётся видимым.'
+          : '<b>v3:</b> поле видимо, <b>без автофокуса</b>. Клавиатура не открывается сама — вы тапаете поле, и браузер сам держит его в виду.');
       var brands=dlg.querySelectorAll('[data-quiz-brand]');
       brands.forEach(function(btn){
         btn.onclick=function(){
@@ -178,9 +198,25 @@ body{background:#e8e6e1;font-family:'DM Sans',system-ui,sans-serif;}
               var wrap=blk.closest('div');
               var sc=dlg.querySelector('[data-quiz="body"]');
               var sr=sc.getBoundingClientRect(), wr=wrap.getBoundingClientRect();
-              var visible = wr.top>=sr.top && wr.bottom<=sr.bottom;
-              if(!visible) wrap.scrollIntoView({block:'center'});
-              blk.focus({preventScroll:true});
+              var fullyVisible = wr.top>=sr.top && wr.bottom<=sr.bottom;
+              if(variant==='v1'){
+                // the FAILED design: centre alignment leaves the field under the keyboard
+                if(!fullyVisible) wrap.scrollIntoView({block:'center'});
+                blk.focus({preventScroll:true});
+              } else if(variant==='v2'){
+                // The block sits at the END of the content, so scrolling alone cannot
+                // bring it to the port top (not enough content below). Add a temporary
+                // bottom spacer to create scroll room, THEN top-align, THEN focus.
+                // The keyboard covers the bottom, so a top-aligned field stays visible.
+                sc.style.paddingBottom = sr.height + 'px';
+                wrap.scrollIntoView({block:'start'});
+                blk.focus({preventScroll:true});
+              } else {
+                // v3: reveal with minimal scroll so the field is fully visible, NO autofocus.
+                // The user's own tap focuses, and the browser's native keyboard handling
+                // keeps the field in view — no spacer, no forced alignment.
+                wrap.scrollIntoView({block:'nearest'});
+              }
             }
           } else if(!blockOpen && mode==='after' && other){
             other.focus({preventScroll:true});
@@ -227,6 +263,7 @@ body{background:#e8e6e1;font-family:'DM Sans',system-ui,sans-serif;}
       ci.oninput=function(){custom=ci.value;syncStep1(dlg);};
     } else if(!blockOpen && existing){
       existing.closest('div').remove();
+      var sc0=dlg.querySelector('[data-quiz="body"]'); if(sc0) sc0.style.paddingBottom='';
     }
     if(other) other.setAttribute('aria-expanded', blockOpen?'true':'false');
     var ok = !!brand || !!custom.trim();
