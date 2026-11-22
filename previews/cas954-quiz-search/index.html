@@ -120,6 +120,15 @@
   .tile:active{transform:scale(.98)}
   .tile.sel{border-color:var(--primary);background:var(--secondary);color:var(--secondary-foreground);box-shadow:0 1px 4px rgba(0,0,0,.05)}
   .tile.other{border-style:dashed;background:rgba(234,231,225,.5);color:var(--muted-foreground)}
+  /* «+ Другая» на всю ширину (3 колонки), sticky — всегда в первом экране (решение владельца 22.11) */
+  .tile.other-full{width:100%;margin-top:10px;min-height:44px;border-radius:6px;border:1px dashed rgba(95,107,104,.5);
+    background:var(--muted);color:var(--foreground);font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;
+    display:flex;align-items:center;justify-content:center;transition:all .12s}
+  .tile.other-full:hover{background:#e0ddd5}
+  .tile.other-full.sticky{position:sticky;bottom:0;z-index:3;box-shadow:0 -6px 16px rgba(28,35,33,.10)}
+  .tile.other-full.on{border-style:solid;border-color:var(--primary);background:var(--secondary);color:var(--secondary-foreground)}
+  /* CAS-946: временный нижний спейсер — без него top-align не поднимет блок над софт-клавиатурой */
+  .kbd-spacer{height:280px;flex-shrink:0}
   .tile-note{margin:12px 0 0;font-size:12px;line-height:1.4;color:var(--muted-foreground)}
 
   /* ── Список (SearchList) ── */
@@ -243,7 +252,7 @@ const DATA = {"brands":[{"name":"ГАЗ","models":[{"name":"12 (ЗИМ)","genera
 const P = new URLSearchParams(location.search);
 const state = {
   v: P.get('v') === 'B' ? 'B' : 'A',
-  size: [12, 18, 24].includes(+P.get('size')) ? +P.get('size') : 12,
+  size: [12, 18, 24].includes(+P.get('size')) ? +P.get('size') : 18,
   sort: ['S1','S2','S3'].includes(P.get('sort')) ? P.get('sort') : 'S3',
   step: Math.min(4, Math.max(1, parseInt(P.get('step') || '1', 10) || 1)),
   brand: P.get('brand') || '',
@@ -378,17 +387,18 @@ function searchBox(placeholder) {
     ${state.q ? '<button class="clearq" id="clearq" title="Очистить">✕</button>' : ''}
   </div>`;
 }
-/* Единое поле «Другая» (п.4 владельца): марка+модель+год одной строкой.
- * Раскрытие — механика CAS-946: блок виден, сразу набираем, «Свернуть ×». */
+/* Единое поле «Другая» (п.4 владельца): марка+модель+год одной строкой, в CRM уходит как есть.
+ * Раскрытие — механика CAS-946: спейсер 280px → top-align → автофокус; «Свернуть ×». */
 function customBlock() {
   return `<div class="custom-block" id="customblock">
     <div class="head">
       <label for="freebrand">Укажите автомобиль:</label>
       <button class="collapse" id="collapsecustom">Свернуть ×</button>
     </div>
-    <input id="freebrand" type="text" autocomplete="off" placeholder="Например: Москвич 412 1976 года" value="${esc(state.otherBrandText)}">
-    <p class="help">Марка, модель и год — одной строкой, ничего больше заполнять не нужно. Знаете только марку — впишите её.</p>
-  </div>`;
+    <input id="freebrand" type="text" autocomplete="off" placeholder="Марка, модель и год — одной строкой" value="${esc(state.otherBrandText)}">
+    <p class="help">Знаете только марку — впишите её, остальное уточним по фото. Дальше сразу телефон — больше ничего заполнять не нужно.</p>
+  </div>
+  <div class="kbd-spacer" aria-hidden="true"></div>`;
 }
 
 function renderStep1() {
@@ -411,8 +421,10 @@ function renderStep1() {
     for (const n of showcase) {
       html += `<button class="tile ${state.brand === n ? 'sel' : ''}" data-brand="${esc(n)}">${esc(n)}</button>`;
     }
-    html += `<button class="tile other ${state.otherBrand ? 'sel' : ''}" id="other" aria-expanded="${state.otherBrand}">+ Другая</button></div>`;
+    html += '</div>';
     html += `<p class="tile-note">Витрина ${state.size} — топ по заказам CRM за 12 мес (прототип). Остальные марки — через поиск.</p>`;
+    // на всю ширину; sticky пока блок не раскрыт — «Другая» не уходит под фолд ни при каком размере витрины
+    html += `<button class="tile other-full ${state.otherBrand ? 'on' : 'sticky'}" id="other" aria-expanded="${state.otherBrand}">+ Другая</button>`;
   } else {
     html += '<div class="list tall" role="listbox">';
     html += '<div class="sec">Популярные · по заказам</div>';
@@ -542,7 +554,7 @@ function renderStep4() {
       ${state.skippedGen ? (state.modelUnknown
         ? '<div class="note"><b>Поколение пропущено:</b> модель не указана — уточним по фото. Шаг 3 не показывается; quiz_step_3 эмитится синтетически перед quiz_step_4 (паттерн CAS-939) — воронка монотонна, форма событий не меняется.</div>'
         : '<div class="note"><b>Поколение пропущено:</b> у модели нет данных о поколениях на av.by (новые модели — Cityray, X50+ и т.п.; av.by — истина). Шаг 3 не показывается; quiz_step_3 эмитится синтетически перед quiz_step_4 (паттерн CAS-939) — воронка монотонна, форма событий не меняется.</div>') : ''}
-      ${state.otherBrandText ? '<div class="note"><b>Единое поле «Другая»:</b> марка+модель+год одной строкой закрыли автомобильные шаги — никаких трёх полей ввода. Контракт payload для единой строки (парсить в поля или хранить целиком) фиксирует спека; флоу/дрейнер не меняются.</div>' : ''}
+      ${state.otherBrandText ? '<div class="note"><b>Единое поле «Другая» (решение владельца):</b> строка уходит в CRM как есть (car_brand_custom), без парсинга — флоу/дрейнер не меняются. Марка+модель+год одной строкой закрыли автомобильные шаги; дальше телефон.</div>' : ''}
     </div>
   </section>`;
   body.innerHTML = html;
