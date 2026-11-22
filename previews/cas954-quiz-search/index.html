@@ -116,6 +116,7 @@
   .tile{min-height:44px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--card);
     font-size:13px;font-weight:600;line-height:1.2;color:var(--foreground);cursor:pointer;font-family:inherit;
     overflow-wrap:anywhere;transition:all .12s;display:flex;align-items:center;justify-content:center;text-align:center}
+  @media (min-width:960px){.tile{min-height:58px;font-size:13.5px}}
   .tile:hover{border-color:rgba(90,107,79,.5)}
   .tile:active{transform:scale(.98)}
   .tile.sel{border-color:var(--primary);background:var(--secondary);color:var(--secondary-foreground);box-shadow:0 1px 4px rgba(0,0,0,.05)}
@@ -186,6 +187,7 @@
     <button data-v="B">B · поиск+список</button>
   </span>
   <span class="grp">Плиток:
+    <button data-size="0">авто</button>
     <button data-size="12">12</button>
     <button data-size="18">18</button>
     <button data-size="24">24</button>
@@ -251,7 +253,7 @@ const DATA = {"brands":[{"name":"ГАЗ","models":[{"name":"12 (ЗИМ)","genera
 const P = new URLSearchParams(location.search);
 const state = {
   v: P.get('v') === 'B' ? 'B' : 'A',
-  size: [12, 18, 24].includes(+P.get('size')) ? +P.get('size') : 18,
+  size: [12, 18, 24].includes(+P.get('size')) ? +P.get('size') : 0, // 0 = авто: десктоп 24 (6×4), мобайл 18
   sort: ['S1','S2','S3'].includes(P.get('sort')) ? P.get('sort') : 'S3',
   step: Math.min(4, Math.max(1, parseInt(P.get('step') || '1', 10) || 1)),
   brand: P.get('brand') || '',
@@ -275,6 +277,8 @@ const MODEL_ALIASES = { 'Dongfeng': { 'BOX': ['бокс', 'box'] } };
 const LISTINGS = DATA.listings;                // brand -> model -> count
 const DEMAND = DATA.demand;                    // [{name, orders}] CRM 12m, desc
 const SHOWCASES = DATA.showcases;              // {12:[...], 18:[...], 24:[...]}
+// авто-размер витрины: десктоп (≥960px) — 24 (ровно 6 рядов × 4), мобайл — 18
+const effectiveSize = () => state.size || (window.matchMedia('(min-width: 960px)').matches ? 24 : 18);
 
 const STEPS = ['Марка авто','Модель авто','Поколение','Госномер','Марка телефона','Модель телефона','Контакт'];
 const norm = s => (s || '').toLowerCase().replace(/ё/g,'е').replace(/\s+/g,' ').trim();
@@ -373,7 +377,7 @@ function renderChrome() {
     : [state.brand, state.modelUnknown ? 'модель уточним' : state.model, state.gen].filter(Boolean).join(' · ');
   $('#sum-auto').textContent = auto || '—';
   document.querySelectorAll('#proto-bar [data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === state.v));
-  document.querySelectorAll('#proto-bar [data-size]').forEach(b => b.classList.toggle('on', +b.dataset.size === state.size));
+  document.querySelectorAll('#proto-bar [data-size]').forEach(b => b.classList.toggle('on', +b.dataset.size === (state.size || 0) || (+b.dataset.size === effectiveSize() && !state.size)));
   document.querySelectorAll('#proto-bar [data-sort]').forEach(b => b.classList.toggle('on', b.dataset.sort === state.sort));
   document.querySelectorAll('#proto-bar [data-step]').forEach(b => b.classList.toggle('on', +b.dataset.step === state.step));
 }
@@ -401,7 +405,7 @@ function customBlock() {
 function renderStep1() {
   const body = $('#qbody');
   const hits = state.q ? searchBrands(state.q) : null;
-  const showcase = SHOWCASES[state.size];
+  const showcase = SHOWCASES[effectiveSize()];
   let html = '<section><h3>Выберите марку автомобиля</h3><p class="sub">По ней мы отрисуем дизайн чехла</p>';
   html += searchBox('Поиск марки: Honda, Лада…');
   if (hits) {
@@ -597,6 +601,7 @@ $('#proto-toggle').addEventListener('click', () => document.body.classList.add('
 $('#proto-close').addEventListener('click', () => document.body.classList.remove('proto-open'));
 document.querySelectorAll('#proto-bar [data-v]').forEach(b => b.addEventListener('click', () => { state.v = b.dataset.v; state.step = 1; state.q = ''; render(); }));
 document.querySelectorAll('#proto-bar [data-size]').forEach(b => b.addEventListener('click', () => { state.size = +b.dataset.size; state.step = 1; state.q = ''; render(); }));
+window.matchMedia('(min-width: 960px)').addEventListener('change', () => { if (!state.size) render(); });
 document.querySelectorAll('#proto-bar [data-sort]').forEach(b => b.addEventListener('click', () => { state.sort = b.dataset.sort; if (state.step === 1 && state.brand) state.step = 2; state.q = ''; render(); }));
 document.querySelectorAll('#proto-bar [data-step]').forEach(b => b.addEventListener('click', () => {
   const s = +b.dataset.step;
