@@ -120,12 +120,11 @@
   .tile:active{transform:scale(.98)}
   .tile.sel{border-color:var(--primary);background:var(--secondary);color:var(--secondary-foreground);box-shadow:0 1px 4px rgba(0,0,0,.05)}
   .tile.other{border-style:dashed;background:rgba(234,231,225,.5);color:var(--muted-foreground)}
-  /* «+ Другая» на всю ширину (3 колонки), sticky — всегда в первом экране (решение владельца 22.11) */
+  /* «+ Другая» на всю ширину (3 колонки), в общем потоке — как другие плитки (решение владельца 22.11 р2) */
   .tile.other-full{width:100%;margin-top:10px;min-height:44px;border-radius:6px;border:1px dashed rgba(95,107,104,.5);
     background:var(--muted);color:var(--foreground);font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;
     display:flex;align-items:center;justify-content:center;transition:all .12s}
   .tile.other-full:hover{background:#e0ddd5}
-  .tile.other-full.sticky{position:sticky;bottom:0;z-index:3;box-shadow:0 -6px 16px rgba(28,35,33,.10)}
   .tile.other-full.on{border-style:solid;border-color:var(--primary);background:var(--secondary);color:var(--secondary-foreground)}
   /* CAS-946: временный нижний спейсер — без него top-align не поднимет блок над софт-клавиатурой */
   .kbd-spacer{height:280px;flex-shrink:0}
@@ -201,7 +200,7 @@
     <button data-step="2">2</button>
     <button data-step="3">3</button>
   </span>
-  <span class="hint">база v2 · спрос CRM 12 мес · не прод</span>
+  <span class="hint">база v2 · не прод · поиск: алиасы+транслит+fuzzy · S3: топ по av.by · «Другая»: единая строка→CRM · поколение: скип если нет данных</span>
   <button id="proto-close" title="Свернуть панель">✕</button>
 </div>
 <div id="stage">
@@ -411,8 +410,7 @@ function renderStep1() {
     html += '<div class="list tall" role="listbox">';
     if (hits.length === 0) html += '<p class="empty">Ничего не найдено — нажмите «+ Другая марка» и впишите автомобиль вручную.</p>';
     for (const h of hits.slice(0, 30)) {
-      const badge = h.kind === 'точно' ? '' : `<span class="badge ${h.kind === 'похоже' ? 'fuzzy' : ''}">${h.kind}</span>`;
-      html += `<button class="opt ${state.brand === h.name ? 'sel' : ''}" data-brand="${esc(h.name)}">${esc(h.name)}${badge}</button>`;
+      html += `<button class="opt ${state.brand === h.name ? 'sel' : ''}" data-brand="${esc(h.name)}">${esc(h.name)}</button>`;
     }
     html += '</div>';
     html += `<button class="special ${state.otherBrand ? 'on' : ''}" id="other">+ Другая марка — вписать вручную</button>`;
@@ -422,13 +420,11 @@ function renderStep1() {
       html += `<button class="tile ${state.brand === n ? 'sel' : ''}" data-brand="${esc(n)}">${esc(n)}</button>`;
     }
     html += '</div>';
-    html += `<p class="tile-note">Витрина ${state.size} — топ по заказам CRM за 12 мес (прототип). Остальные марки — через поиск.</p>`;
-    // на всю ширину; sticky пока блок не раскрыт — «Другая» не уходит под фолд ни при каком размере витрины
-    html += `<button class="tile other-full ${state.otherBrand ? 'on' : 'sticky'}" id="other" aria-expanded="${state.otherBrand}">+ Другая</button>`;
+    html += `<button class="tile other-full ${state.otherBrand ? 'on' : ''}" id="other" aria-expanded="${state.otherBrand}">+ Другая</button>`;
   } else {
     html += '<div class="list tall" role="listbox">';
     html += '<div class="sec">Популярные · по заказам</div>';
-    for (const n of showcase) html += `<button class="opt ${state.brand === n ? 'sel' : ''}" data-brand="${esc(n)}">${esc(n)}<span class="badge pop">${demandOf(n)} зак.</span></button>`;
+    for (const n of showcase) html += `<button class="opt ${state.brand === n ? 'sel' : ''}" data-brand="${esc(n)}">${esc(n)}</button>`;
     html += '<div class="sec">Все марки А→Я · 58</div>';
     for (const b of BRANDS) html += `<button class="opt ${state.brand === b.name ? 'sel' : ''}" data-brand="${esc(b.name)}">${esc(b.name)}</button>`;
     html += '</div>';
@@ -477,8 +473,7 @@ function renderStep2() {
     html += '<div class="list" role="listbox">';
     if (hits.length === 0) html += '<p class="empty">Ничего не найдено — проверьте написание.</p>';
     for (const h of hits.slice(0, 30)) {
-      const badge = h.kind === 'точно' ? '' : `<span class="badge ${h.kind === 'похоже' ? 'fuzzy' : ''}">${h.kind}</span>`;
-      html += `<button class="opt ${state.model === h.name ? 'sel' : ''}" data-model="${esc(h.name)}">${esc(h.name)}${badge}</button>`;
+      html += `<button class="opt ${state.model === h.name ? 'sel' : ''}" data-model="${esc(h.name)}">${esc(h.name)}</button>`;
     }
     html += '</div>';
     if (hits.length === 0 && !state.freeModel) html += `<button class="special" id="freemodelbtn">Не нашли? Впишите модель вручную</button>`;
@@ -489,14 +484,12 @@ function renderStep2() {
     for (const sec of sections) {
       if (sec.title) html += `<div class="sec">${esc(sec.title)}</div>`;
       for (const it of sec.items) {
-        const pop = it.pop ? `<span class="badge pop">${it.pop} об.</span>` : '';
-        html += `<button class="opt ${state.model === it.name ? 'sel' : ''}" data-model="${esc(it.name)}">${esc(it.name)}${pop}</button>`;
+        html += `<button class="opt ${state.model === it.name ? 'sel' : ''}" data-model="${esc(it.name)}">${esc(it.name)}</button>`;
       }
     }
     html += '</div>';
   }
   if (hasList) html += `<button class="special ${state.modelUnknown ? 'on' : ''}" id="unknown">Не знаю точную модель — пропустить шаг</button>`;
-  html += `<details class="legend"><summary><b>О сортировке ${state.sort} (прототип)</b></summary> ${state.sort === 'S1' ? 'А→Я, как в текущем проде.' : state.sort === 'S2' ? 'все модели по числу объявлений av.by.' : '«Популярные» (топ-6 по объявлениям av.by) + остальные А→Я; для марок с ≤10 моделями — плоский А→Я.'} Бейдж «N об.» в проде можно скрыть.</details>`;
   html += '</section>';
   body.innerHTML = html;
   wireSearch();
