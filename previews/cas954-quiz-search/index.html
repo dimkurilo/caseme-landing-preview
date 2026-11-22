@@ -116,7 +116,6 @@
   .tile{min-height:44px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--card);
     font-size:13px;font-weight:600;line-height:1.2;color:var(--foreground);cursor:pointer;font-family:inherit;
     overflow-wrap:anywhere;transition:all .12s;display:flex;align-items:center;justify-content:center;text-align:center}
-  @media (min-width:960px){.tile{min-height:58px;font-size:13.5px}}
   .tile:hover{border-color:rgba(90,107,79,.5)}
   .tile:active{transform:scale(.98)}
   .tile.sel{border-color:var(--primary);background:var(--secondary);color:var(--secondary-foreground);box-shadow:0 1px 4px rgba(0,0,0,.05)}
@@ -266,6 +265,7 @@ const state = {
   freeModel: false,
   genUnknown: false,
   skippedGen: false,                     // шаг 3 пропущен: у модели нет поколений (av.by — истина)
+  stubNote: false,                       // заглушка шага 4: «Далее» нажата, шаги 5–7 не реализованы
 };
 if (P.get('clean') === '1') document.body.classList.add('clean');
 if (P.get('bar') === '1') document.body.classList.add('proto-open');
@@ -363,6 +363,13 @@ function sortedModels(brand) {
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const searchSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5" stroke-linecap="round"/></svg>';
+/* Прод-механика scheduleAdvance: выбор → подсветка + зелёная «Далее» → переход через 300ms */
+let advanceTimer = null;
+function scheduleAdvance(fn) {
+  if (advanceTimer) clearTimeout(advanceTimer);
+  advanceTimer = setTimeout(() => { advanceTimer = null; fn(); }, 300);
+}
+function clearAdvance() { if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer = null; } }
 
 function renderChrome() {
   $('#step-num').textContent = state.step;
@@ -437,12 +444,15 @@ function renderStep1() {
   body.innerHTML = html;
   wireSearch();
   body.querySelectorAll('[data-brand]').forEach(el => el.addEventListener('click', () => {
+    clearAdvance();
     state.brand = el.dataset.brand; state.otherBrand = false; state.model = ''; state.gen = ''; state.q = '';
     state.freeModel = false; state.genUnknown = false; state.modelUnknown = false; state.skippedGen = false;
-    state.step = 2; render();
+    render(); // выбор виден, «Далее» зеленеет (canProceed)
+    scheduleAdvance(() => { state.step = 2; render(); });
   }));
   const other = body.querySelector('#other');
   if (other) other.addEventListener('click', () => {
+    clearAdvance();
     if (state.otherBrand) { collapseCustom(); return; }
     state.otherBrand = true; render();
     // CAS-946: top-align + автофокус (спейсер в проде нужен из-за софт-клавиатуры)
@@ -457,6 +467,7 @@ function renderStep1() {
   updateNext();
 }
 function collapseCustom() {
+  clearAdvance();
   state.otherBrand = false; render();
   $('#qbody').querySelector('#other')?.focus({ preventScroll: true });
 }
@@ -496,15 +507,24 @@ function renderStep2() {
   body.innerHTML = html;
   wireSearch();
   body.querySelectorAll('[data-model]').forEach(el => el.addEventListener('click', () => {
+    clearAdvance();
     state.model = el.dataset.model; state.modelUnknown = false; state.gen = ''; state.q = '';
     state.freeModel = false; state.genUnknown = false;
+    render(); // «Далее» зеленеет на шаге 2
     // п.3 владельца: поколение только если оно реально есть (av.by — истина)
-    if (realGens(state.brand, state.model).length === 0) { state.skippedGen = true; state.step = 4; }
-    else { state.skippedGen = false; state.step = 3; }
-    render();
+    scheduleAdvance(() => {
+      if (realGens(state.brand, state.model).length === 0) { state.skippedGen = true; state.step = 4; }
+      else { state.skippedGen = false; state.step = 3; }
+      render();
+    });
   }));
   const un = body.querySelector('#unknown');
-  if (un) un.addEventListener('click', () => { state.modelUnknown = !state.modelUnknown; state.model = state.modelUnknown ? 'Не знаю модель' : ''; render(); });
+  if (un) un.addEventListener('click', () => {
+    clearAdvance();
+    state.modelUnknown = !state.modelUnknown; state.model = state.modelUnknown ? 'Не знаю модель' : '';
+    render();
+    if (state.modelUnknown) scheduleAdvance(() => { state.skippedGen = true; state.step = 4; render(); });
+  });
   const fmb = body.querySelector('#freemodelbtn');
   if (fmb) fmb.addEventListener('click', () => { state.freeModel = true; render(); body.querySelector('#freemodel')?.focus(); });
   const fm = body.querySelector('#freemodel');
@@ -532,9 +552,19 @@ function renderStep3() {
   html += '</section>';
   body.innerHTML = html;
   wireSearch();
-  body.querySelectorAll('[data-gen]').forEach(el => el.addEventListener('click', () => { state.gen = el.dataset.gen; state.genUnknown = false; state.q = ''; render(); }));
+  body.querySelectorAll('[data-gen]').forEach(el => el.addEventListener('click', () => {
+    clearAdvance();
+    state.gen = el.dataset.gen; state.genUnknown = false; state.q = '';
+    render(); // «Далее» зеленеет на шаге 3
+    scheduleAdvance(() => { state.step = 4; render(); });
+  }));
   const gu = body.querySelector('#genunknown');
-  if (gu) gu.addEventListener('click', () => { state.genUnknown = !state.genUnknown; state.gen = state.genUnknown ? 'Не знаю поколение' : ''; render(); });
+  if (gu) gu.addEventListener('click', () => {
+    clearAdvance();
+    state.genUnknown = !state.genUnknown; state.gen = state.genUnknown ? 'Не знаю поколение' : '';
+    render();
+    if (state.genUnknown) scheduleAdvance(() => { state.step = 4; render(); });
+  });
   updateNext();
 }
 
@@ -550,6 +580,7 @@ function renderStep4() {
         ? '<div class="note"><b>Поколение пропущено:</b> модель не указана — уточним по фото. Шаг 3 не показывается; quiz_step_3 эмитится синтетически перед quiz_step_4 (паттерн CAS-939) — воронка монотонна, форма событий не меняется.</div>'
         : '<div class="note"><b>Поколение пропущено:</b> у модели нет данных о поколениях на av.by (новые модели — Cityray, X50+ и т.п.; av.by — истина). Шаг 3 не показывается; quiz_step_3 эмитится синтетически перед quiz_step_4 (паттерн CAS-939) — воронка монотонна, форма событий не меняется.</div>') : ''}
       ${state.otherBrandText ? '<div class="note"><b>Единое поле «Другая» (решение владельца):</b> строка уходит в CRM как есть (car_brand_custom), без парсинга — флоу/дрейнер не меняются. Марка+модель+год одной строкой закрыли автомобильные шаги; дальше телефон.</div>' : ''}
+      ${state.stubNote ? '<div class="note"><b>Шаги 5–7 в прототипе не реализованы.</b> В проде «Далее» на шаге 4 активна всегда (CAS-946: пустой номер = «без номера») — здесь это воспроизведено; дальше начинаются марка/модель телефона и контакт.</div>' : ''}
     </div>
   </section>`;
   body.innerHTML = html;
@@ -573,7 +604,7 @@ function updateNext() {
   const ok = state.step === 1 ? (state.brand || (state.otherBrand && state.otherBrandText.trim()))
     : state.step === 2 ? (state.model || state.modelUnknown)
     : state.step === 3 ? !!state.gen
-    : false;
+    : true; // шаг 4: «Далее» активна всегда (CAS-946: пустой номер = «без номера»)
   $('#next').disabled = !ok;
 }
 function render() {
@@ -589,12 +620,14 @@ function render() {
   }
 }
 $('#prev').addEventListener('click', () => {
+  clearAdvance();
   if (state.step === 4) { state.step = state.skippedGen || state.otherBrandText ? (state.otherBrandText ? 1 : 2) : 3; state.q = ''; render(); return; }
   if (state.step > 1) { state.step--; state.q = ''; render(); }
 });
 $('#next').addEventListener('click', () => {
+  clearAdvance();
   if (state.step === 1 && state.otherBrandText && !state.brand) { state.step = 4; state.q = ''; render(); return; }
-  if (state.step === 2 && state.modelUnknown) { state.skippedGen = true; state.step = 4; state.q = ''; render(); return; }
+  if (state.step === 4) { state.stubNote = true; render(); return; } // заглушка: шаги 5–7 не реализованы
   if (state.step < 4) { state.step++; state.q = ''; render(); }
 });
 $('#proto-toggle').addEventListener('click', () => document.body.classList.add('proto-open'));
@@ -604,6 +637,7 @@ document.querySelectorAll('#proto-bar [data-size]').forEach(b => b.addEventListe
 window.matchMedia('(min-width: 960px)').addEventListener('change', () => { if (!state.size) render(); });
 document.querySelectorAll('#proto-bar [data-sort]').forEach(b => b.addEventListener('click', () => { state.sort = b.dataset.sort; if (state.step === 1 && state.brand) state.step = 2; state.q = ''; render(); }));
 document.querySelectorAll('#proto-bar [data-step]').forEach(b => b.addEventListener('click', () => {
+  clearAdvance();
   const s = +b.dataset.step;
   if (s >= 2 && !state.brand) { state.brand = 'Volkswagen'; }
   if (s >= 3 && !state.model) { state.model = 'Passat'; }
